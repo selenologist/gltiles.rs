@@ -62,7 +62,6 @@ fn main() {
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 0.0, 1.0);
 
-        use std::f32;
         tb.draw(&program, &mut target, &atl, [t.sin(),(t*3.0f32).cos()]);
 
         target.finish().unwrap();

@@ -37,8 +37,8 @@ impl TileBlock{
             TL, TR, BL, BR
         }
         let tile_pos_to_gl_pos = |ppos: [f32; 2]| -> [f32; 2]{
-            [ppos[0] / atlas.atlas_w_f,
-            (-ppos[1] / atlas.atlas_h_f)]
+            [ ppos[0],
+             -ppos[1]]
         };
         let get_atlas_coord = |corner: Corner| -> [f32; 2]{
             let (addx, addy) =
@@ -158,8 +158,8 @@ impl TileBlock{
         let (frame_x, frame_y) = target.get_dimensions();
 
         let (scale_x, scale_y) =
-            (atlas.dimensions.tile_w_f / (frame_x as f32 / 2.0f32) * atlas.dimensions.atlas_w_f,
-             atlas.dimensions.tile_h_f / (frame_y as f32 / 2.0f32) * atlas.dimensions.atlas_h_f);
+            (atlas.dimensions.tile_w_f / (frame_x as f32 / 2.0f32),
+             atlas.dimensions.tile_h_f / (frame_y as f32 / 2.0f32));
 
         let scaled_matrix: Matrix3<f32> =
             Matrix3::new(scale_x, 0.0f32,  0.0f32,
