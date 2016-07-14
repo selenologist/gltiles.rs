@@ -7,4 +7,4 @@ authors = ["Selenologist <none@example.com>"]
 image = "*"
 glium = "*"
 rustc-serialize = "0.3" # will port to Serde when stable
-
+nalgebra = "*"

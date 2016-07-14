@@ -10,26 +10,6 @@ struct Vertex {
 }
 implement_vertex!(Vertex, position, texcoord);
 
-
-#[derive(Copy,Clone)]
-pub struct ViewDimensions{
-    w_u: u16,
-    h_u: u16,
-    w_f: f32,
-    h_f: f32
-}
-
-impl ViewDimensions{
-    pub fn new_from_u16(w: u16, h: u16) -> ViewDimensions{
-        ViewDimensions {
-            w_u: w,
-            h_u: h,
-            w_f: w as f32,
-            h_f: h as f32
-        }
-    }
-}
-
 pub struct TileBlock{
     atlas:  atlas::AtlasDimensions,
     width:  u32,
@@ -48,7 +28,6 @@ pub enum TileBlockErr{
 
 impl TileBlock{
     fn generate_tile_triangles(&self,
-                               window: &ViewDimensions,
                                position: [f32; 2],
                                tile_id: u32) -> [Vertex; 4]{
         let atlas = self.atlas;
@@ -57,9 +36,9 @@ impl TileBlock{
         enum Corner{
             TL, TR, BL, BR
         }
-        let pixel_pos_to_gl_pos = |ppos: [f32; 2]| -> [f32; 2]{
-            [-1.0f32 + (ppos[0] / window.w_f) * 2.0,
-              1.0f32 - (ppos[1] / window.h_f) * 2.0]
+        let tile_pos_to_gl_pos = |ppos: [f32; 2]| -> [f32; 2]{
+            [ppos[0] / atlas.atlas_w_f,
+            (-ppos[1] / atlas.atlas_h_f)]
         };
         let get_atlas_coord = |corner: Corner| -> [f32; 2]{
             let (addx, addy) =
@@ -70,20 +49,20 @@ impl TileBlock{
                     Corner::BR => (1, 0)
                 };
             [atlas.tile_w_f / atlas.atlas_w_f * (tile_id % atlas_columns + addx) as f32,
-             atlas.atlas_h_f - atlas.tile_h_f / atlas.atlas_h_f * (tile_id / atlas_columns + addy) as f32]
+             1.0f32 - atlas.tile_h_f / atlas.atlas_h_f * (tile_id / atlas_columns + addy) as f32]
         };
 
-        [Vertex{position: pixel_pos_to_gl_pos([position[0] + 0f32,
-                                               position[1] + atlas.tile_h_f]),
+        [Vertex{position: tile_pos_to_gl_pos([position[0] + 0.0f32,
+                                              position[1] + 1.0f32]),
                 texcoord: get_atlas_coord(Corner::TL)}, // 0
-         Vertex{position: pixel_pos_to_gl_pos([position[0] + 0f32,
-                                               position[1] + 0f32]),
+         Vertex{position: tile_pos_to_gl_pos([position[0] + 0.0f32,
+                                              position[1] + 0.0f32]),
                 texcoord: get_atlas_coord(Corner::BL)}, // 1
-         Vertex{position: pixel_pos_to_gl_pos([position[0] + atlas.tile_w_f,
-                                               position[1] + atlas.tile_h_f]),
+         Vertex{position: tile_pos_to_gl_pos([position[0] + 1.0f32,
+                                              position[1] + 1.0f32]),
                 texcoord: get_atlas_coord(Corner::TR)}, // 2
-         Vertex{position: pixel_pos_to_gl_pos([position[0] + atlas.tile_w_f,
-                                               position[1] + 0f32]),
+         Vertex{position: tile_pos_to_gl_pos([position[0] + 1.0f32,
+                                              position[1] + 0.0f32]),
                 texcoord: get_atlas_coord(Corner::BR)}, // 3
         ]
     }
@@ -95,9 +74,7 @@ impl TileBlock{
          (index_base + 2)    as u16, (index_base + 1) as u16, (index_base + 3) as u16]
     }
 
-    fn update(&self,
-              window: &ViewDimensions){
-
+    fn update(&self){
         let triangles:Vec<Vertex> =
             self.block.iter()
             .enumerate()
@@ -106,16 +83,16 @@ impl TileBlock{
                 let index   = tile.0 as u32;
                 let tile_id = *tile.1 as u32;
                       acc.extend_from_slice(
-                          &self.generate_tile_triangles(window,
-                                             [self.atlas.tile_w_f * (index % self.width) as f32,
-                                              self.atlas.tile_h_f * (index / self.width) as f32],
+                          &self.generate_tile_triangles(
+                                             [(index % self.width) as f32,
+                                              (index / self.width) as f32],
                                                         tile_id));
                       acc});
 
         self.vbo.write(&triangles);
     }
 
-    pub fn new<F>(glium: &F, atlas: &Atlas, window: &ViewDimensions,
+    pub fn new<F>(glium: &F, atlas: &Atlas,
                   width: u32, height: u32, block: Option<&[u8]>)
                   -> Result<TileBlock, TileBlockErr>
         where F: glium::backend::Facade{
@@ -142,7 +119,10 @@ impl TileBlock{
 
         let indices:Vec<u16> =
             (0..(width * height))
-            .fold(Vec::<u16>::new(), |mut acc, tile_index| {acc.extend_from_slice(&TileBlock::generate_tile_indices(tile_index as u32)); acc});
+            .fold(Vec::<u16>::new(),
+                  |mut acc, tile_index|
+                  { acc.extend_from_slice(&TileBlock::generate_tile_indices(tile_index as u32));
+                    acc });
 
         let ibo =
             match glium::IndexBuffer::persistent(glium,
@@ -162,7 +142,7 @@ impl TileBlock{
             ibo:    ibo
         };
 
-        tb.update(window);
+        tb.update();
 
         Ok(tb)
     }
@@ -173,9 +153,27 @@ impl TileBlock{
                 atlas: &Atlas,
                 offset: [f32; 2]){
         use glium::Surface;
+        use nalgebra::*;
+
+        let (frame_x, frame_y) = target.get_dimensions();
+
+        let (scale_x, scale_y) =
+            (atlas.dimensions.tile_w_f / (frame_x as f32 / 2.0f32) * atlas.dimensions.atlas_w_f,
+             atlas.dimensions.tile_h_f / (frame_y as f32 / 2.0f32) * atlas.dimensions.atlas_h_f);
+
+        let scaled_matrix: Matrix3<f32> =
+            Matrix3::new(scale_x, 0.0f32,  0.0f32,
+                         0.0f32,  scale_y, 0.0f32,
+                         0.0f32,  0.0f32,  1.0f32);
+
+        let matrix: Matrix3<f32> =
+            Matrix3::new(1.0f32, 0.0f32, offset[0],
+                         0.0f32, 1.0f32, offset[1],
+                         0.0f32, 0.0f32, 1.0f32) * scaled_matrix;
+
         let uniforms = uniform! {
             tex: &atlas.texture,
-            offset: offset
+            matrix: *matrix.as_ref(),
         };
 
         target.draw(&self.vbo, &self.ibo, program, &uniforms,
