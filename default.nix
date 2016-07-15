@@ -7,7 +7,7 @@ with import <nixpkgs> {}; {
         xorg.libX11 xorg.libXcursor xorg.libXxf86vm xorg.libXi
       ]}:$LD_LIBRARY_PATH";
     '';
-   buildInputs = [ stdenv rustc xlibsWrapper
+   buildInputs = [ stdenv rustc xlibsWrapper cargo
                    xorg.libX11 xorg.libXcursor xorg.libXxf86vm xorg.libXi ];
  };
 }
